@@ -52,8 +52,8 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/resume-segregator-pro.git
-   cd resume-segregator-pro
+   git clone https://github.com/GitaSathya/AI-Resume-Segregator.git
+   cd AI-Resume-Segregator
    ```
 
 2. **Create virtual environment**
@@ -169,8 +169,8 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ### Development Setup
 ```bash
-git clone https://github.com/yourusername/resume-segregator-pro.git
-cd resume-segregator-pro
+git clone https://github.com/GitaSathya/AI-Resume-Segregator.git
+cd AI-Resume-Segregator
 pip install -r requirements-dev.txt
 pre-commit install
 ```
@@ -187,9 +187,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Documentation**: [Wiki](https://github.com/yourusername/resume-segregator-pro/wiki)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/resume-segregator-pro/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/resume-segregator-pro/discussions)
+- **Documentation**: [Wiki](https://github.com/GitaSathya/AI-Resume-Segregator/wiki)
+- **Issues**: [GitHub Issues](https://github.com/GitaSathya/AI-Resume-Segregator/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/GitaSathya/AI-Resume-Segregator/discussions)
 
 ## 🔮 Roadmap
 
@@ -205,4 +205,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   <p><strong>Built with ❤️ for HR professionals and recruiters</strong></p>
   <p>Transform your hiring process with AI-powered insights</p>
 </div>
+
 
