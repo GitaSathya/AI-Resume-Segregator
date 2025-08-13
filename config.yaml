@@ -1,0 +1,34 @@
+# Resume Segregator Pro Configuration
+app:
+  name: "AI-Powered Resume Segregator Pro"
+  version: "2.0.0"
+  debug: false
+
+ai:
+  embedding_model: "text-embedding-004"
+  generation_model: "gemini-1.5-flash"
+  max_tokens: 1000
+  temperature: 0.1
+
+processing:
+  max_pages_per_pdf: 20
+  max_chars_per_doc: 60000
+  batch_size: 10
+
+scoring:
+  similarity_weight: 0.5
+  skills_weight: 0.5
+  experience_weight: 0.3
+  education_weight: 0.1
+
+ui:
+  theme: "light"
+  sidebar_state: "expanded"
+  page_title: "Resume Segregator Pro"
+  page_icon: "🚀"
+
+export:
+  csv_include_timestamp: true
+  csv_encoding: "utf-8"
+  max_preview_chars: 500
+
