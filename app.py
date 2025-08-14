@@ -343,7 +343,7 @@ def create_visualizations(df: pd.DataFrame) -> None:
         # Score distribution
         st.write("**Score Distribution**")
         score_ranges = pd.cut(df['composite_score'], bins=[0, 0.4, 0.6, 0.8, 1.0], 
-                             labels=['Poor (0-0.4)', 'Fair (0.4-0.6)', 'Good (0.6-0.8)', 'Excellent (0.8-1.0)'])
+                             labels=['Poor (0-0.4)', 'Fair (0-0.6)', 'Good (0.6-0.8)', 'Excellent (0.8-1.0)'])
         score_counts = score_ranges.value_counts()
         st.bar_chart(score_counts)
         
@@ -359,6 +359,131 @@ def create_visualizations(df: pd.DataFrame) -> None:
             st.write("**Top 3 Candidates**")
             for idx, row in top_3.iterrows():
                 st.write(f"• {row['file_name']}: {row['composite_score']:.2f}")
+
+
+def is_resume_relevant(resume_text: str, jd_constraints: Dict[str, Any], threshold: float = 0.3) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Check if resume is relevant based on job description constraints.
+    Returns (is_relevant, relevance_details)
+    """
+    try:
+        resume_text_lower = resume_text.lower()
+        relevance_score = 0.0
+        total_checks = 0
+        passed_checks = 0
+        details = {
+            "must_have_skills": [],
+            "nice_to_have_skills": [],
+            "education_match": False,
+            "experience_match": False,
+            "overall_relevance": 0.0
+        }
+        
+        # Check must-have skills
+        if jd_constraints.get("must_have_skills"):
+            total_checks += len(jd_constraints["must_have_skills"])
+            for skill in jd_constraints["must_have_skills"]:
+                skill_lower = skill.lower()
+                # Use word boundary matching for more accurate results
+                if re.search(r'\b' + re.escape(skill_lower) + r'\b', resume_text_lower):
+                    details["must_have_skills"].append(skill)
+                    passed_checks += 1
+                    relevance_score += 0.4  # Higher weight for must-have skills
+        
+        # Check nice-to-have skills
+        if jd_constraints.get("nice_to_have_skills"):
+            for skill in jd_constraints["nice_to_have_skills"]:
+                skill_lower = skill.lower()
+                if re.search(r'\b' + re.escape(skill_lower) + r'\b', resume_text_lower):
+                    details["nice_to_have_skills"].append(skill)
+                    relevance_score += 0.2  # Lower weight for nice-to-have skills
+        
+        # Check education requirements
+        if jd_constraints.get("education"):
+            for edu in jd_constraints["education"]:
+                if edu.lower() in resume_text_lower:
+                    details["education_match"] = True
+                    relevance_score += 0.2
+                    break
+        
+        # Check experience requirements
+        min_years = jd_constraints.get("min_years_experience")
+        if min_years:
+            yr_matches = re.findall(r'(\d+)(?:\+)?\s*(?:years|yrs)\s*(?:of)?\s*experience', resume_text_lower)
+            if yr_matches:
+                max_yrs = max(int(x) for x in yr_matches)
+                if max_yrs >= min_years:
+                    details["experience_match"] = True
+                    relevance_score += 0.2
+        
+        # Calculate overall relevance
+        if total_checks > 0:
+            details["overall_relevance"] = min(relevance_score, 1.0)
+            is_relevant = details["overall_relevance"] >= threshold
+        else:
+            # Fallback: if no specific constraints, use basic keyword matching
+            basic_keywords = jd_constraints.get("keywords", [])
+            if basic_keywords:
+                for keyword in basic_keywords:
+                    if re.search(r'\b' + re.escape(keyword.lower()) + r'\b', resume_text_lower):
+                        relevance_score += 0.1
+                details["overall_relevance"] = min(relevance_score, 1.0)
+                is_relevant = details["overall_relevance"] >= threshold
+            else:
+                # No constraints available, accept by default
+                is_relevant = True
+                details["overall_relevance"] = 0.5
+        
+        return is_relevant, details
+        
+    except Exception as e:
+        st.warning(f"Error in relevance check: {str(e)}")
+        return True, {"overall_relevance": 0.5, "error": str(e)}
+
+
+def filter_relevant_resumes(resume_files: List[Tuple[str, bytes]], jd_constraints: Dict[str, Any], 
+                           threshold: float = 0.3) -> Tuple[List[Tuple[str, bytes]], List[Tuple[str, str]]]:
+    """
+    Filter resumes based on relevance to job description.
+    Returns (relevant_resumes, rejected_resumes_with_reasons)
+    """
+    relevant_resumes = []
+    rejected_resumes = []
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for idx, (fname, pdf_bytes) in enumerate(resume_files):
+        try:
+            status_text.text(f"Analyzing relevance: {fname}")
+            
+            # Extract text from PDF
+            rtext = read_pdf_bytes_to_text(pdf_bytes, max_pages=MAX_PAGES_PER_PDF)
+            if not rtext:
+                rejected_resumes.append((fname, "Could not extract text from PDF"))
+                continue
+            
+            # Check relevance
+            is_relevant, relevance_details = is_resume_relevant(rtext, jd_constraints, threshold)
+            
+            if is_relevant:
+                relevant_resumes.append((fname, pdf_bytes))
+            else:
+                reason = f"Relevance score: {relevance_details['overall_relevance']:.2f} (below threshold {threshold})"
+                if relevance_details.get("must_have_skills"):
+                    reason += f" | Missing critical skills: {', '.join(relevance_details['must_have_skills'])}"
+                rejected_resumes.append((fname, reason))
+            
+            progress_bar.progress((idx + 1) / len(resume_files))
+            
+        except Exception as e:
+            rejected_resumes.append((fname, f"Error during analysis: {str(e)}"))
+            progress_bar.progress((idx + 1) / len(resume_files))
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    return relevant_resumes, rejected_resumes
 
 
 ###############################################################################
@@ -423,7 +548,7 @@ st.markdown("""
 # Header
 st.markdown("""
 <div class="main-header">
-    <h1>🚀 AI-Powered Resume Segregator Pro</h1>
+    <h1> AI-Powered Resume Segregator Pro</h1>
     <p style="font-size: 1.2rem; margin: 0;">Intelligent Candidate Ranking & Analysis Platform</p>
     <p style="font-size: 1rem; margin: 0.5rem 0 0 0;">Powered by Google Gemini AI</p>
 </div>
@@ -463,6 +588,15 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # Relevance filtering
+    st.subheader("🔍 Relevance Filtering")
+    relevance_threshold = st.slider("Relevance Threshold", 0.1, 0.9, 0.3, 0.1, 
+                                   help="Resumes below this threshold will be automatically rejected")
+    enable_filtering = st.checkbox("Enable Automatic Resume Filtering", value=True,
+                                  help="Automatically reject irrelevant resumes before scoring")
+    
+    st.markdown("---")
+    
     # App info
     st.subheader("ℹ️ About")
     st.markdown("""
@@ -482,6 +616,8 @@ MAX_PAGES_PER_PDF = st.session_state.get("max_pages", MAX_PAGES_PER_PDF)
 MAX_CHARS_PER_DOC = st.session_state.get("max_chars", MAX_CHARS_PER_DOC)
 SIMILARITY_WEIGHT = st.session_state.get("sim_w", SIMILARITY_WEIGHT)
 SKILL_WEIGHT = st.session_state.get("skill_w", SKILL_WEIGHT)
+RELEVANCE_THRESHOLD = st.session_state.get("relevance_threshold", 0.3)
+ENABLE_FILTERING = st.session_state.get("enable_filtering", True)
 
 # Main content area
 st.markdown("### 📋 Upload Documents")
@@ -597,11 +733,44 @@ if run_btn:
             st.stop()
         progress_bar.progress(80)
 
-    # Score resumes
+    # Filter resumes based on relevance (if enabled)
+    relevant_resumes = resume_files
+    rejected_resumes = []
+    
+    if ENABLE_FILTERING:
+        with st.spinner("🔍 Filtering resumes based on relevance..."):
+            status_text.text("Step 4.5/5: Relevance Filtering...")
+            relevant_resumes, rejected_resumes = filter_relevant_resumes(
+                resume_files, constraints, RELEVANCE_THRESHOLD
+            )
+            
+            if not relevant_resumes:
+                st.error("❌ No resumes passed the relevance threshold. Consider lowering the threshold.")
+                st.stop()
+            
+            # Display filtering results
+            st.info(f"📊 **Filtering Results:** {len(relevant_resumes)} relevant resumes, {len(rejected_resumes)} rejected")
+            
+            if rejected_resumes:
+                with st.expander(f"❌ Rejected Resumes ({len(rejected_resumes)})", expanded=False):
+                    rejected_df = pd.DataFrame(rejected_resumes, columns=["File Name", "Rejection Reason"])
+                    st.dataframe(rejected_df, use_container_width=True)
+                    
+                    # Download rejected resumes list
+                    rejected_csv = rejected_df.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label="📥 Download Rejected Resumes List (CSV)",
+                        data=rejected_csv,
+                        file_name=f"rejected_resumes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+
+    # Score resumes (only relevant ones)
     status_text.text("Step 5/5: AI Scoring & Ranking...")
     rows = []
     
-    for idx, (fname, pdf_bytes) in enumerate(resume_files, start=1):
+    for idx, (fname, pdf_bytes) in enumerate(relevant_resumes, start=1):
         try:
             rtext = read_pdf_bytes_to_text(pdf_bytes, max_pages=MAX_PAGES_PER_PDF)
             if not rtext:
@@ -614,7 +783,7 @@ if run_btn:
         except Exception as e:
             rows.append({"file_name": fname, "error": str(e)})
         
-        progress_bar.progress(80 + (idx / len(resume_files)) * 20)
+        progress_bar.progress(80 + (idx / len(relevant_resumes)) * 20)
 
     if not rows:
         st.warning("⚠️ No parseable resumes found. Please verify the PDFs are text-based (not scanned images).")
@@ -637,6 +806,22 @@ if run_btn:
     # Display metrics
     st.markdown("---")
     st.subheader("📊 Analysis Results")
+    
+    # Show filtering summary if filtering was enabled
+    if ENABLE_FILTERING and rejected_resumes:
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Resumes", len(resume_files))
+        with col2:
+            st.metric("Relevant Resumes", len(relevant_resumes))
+        with col3:
+            st.metric("Rejected Resumes", len(rejected_resumes))
+        with col4:
+            rejection_rate = (len(rejected_resumes) / len(resume_files)) * 100
+            st.metric("Rejection Rate", f"{rejection_rate:.1f}%")
+        
+        st.markdown("---")
+    
     create_metrics_display(df)
 
     # Display ranked results
@@ -710,7 +895,7 @@ if run_btn:
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 1rem;">
-    <p>🚀 AI-Powered Resume Segregator Pro | Built with Streamlit & Google Gemini AI</p>
+    <p>AI-Powered Resume Segregator Pro | Built with Streamlit & Google Gemini AI</p>
     <p>Professional candidate ranking and analysis platform</p>
 </div>
 """, unsafe_allow_html=True)
